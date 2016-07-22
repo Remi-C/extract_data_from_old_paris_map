@@ -17,9 +17,9 @@ def load_images():
     import matplotlib.image as mpimg
     
     #load jacoubet image
-    image_path = '/media/sf_RemiCura/PROJETS/belleepoque/creation_donnees/jacoubet/Feuille31_extract.tif'
-    image_path_axis = '/media/sf_RemiCura/PROJETS/belleepoque/creation_donnees/jacoubet/Feuille31_extract_route.tif'
-    image_path_axis_broken = '/media/sf_RemiCura/PROJETS/belleepoque/creation_donnees/jacoubet/Feuille31_extract_route_broken.tif'
+    image_path = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract.tif'
+    image_path_axis = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract_route.tif'
+    image_path_axis_broken = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract_route_broken.tif'
     
     # open dataset
     ds = gdal.Open(image_path)
@@ -64,9 +64,9 @@ def watershed(base_image, seed_image=None, threshold_distance=80):
     
     #local_maxi = peak_local_max(distance, labels=jac, footprint=np.ones((100, 100)), indices=False)
     if seed_image is None: 
-        markers = label(thresh)[0]
+        markers = label(thresh)
     else:
-        markers = label(seed_image/255.0)[0] 
+        markers = label(seed_image)
 
     imgplot = plt.imshow(markers)
      
@@ -192,12 +192,8 @@ def snake_research(base_image, seed_image, per_size=0.25):
     import morphsnakes
     from matplotlib import pyplot as ppl
     import time   
-    from skimage.transform import resize 
-     
-    from PIL import Image
-    
-    
-    
+    from skimage.transform import resize  
+    from PIL import Image 
 #    # Morphological ACWE. Initialization of the level-set.
 #    macwe = morphsnakes.MorphACWE(base_image, smoothing=smoothing, lambda1=lambda1, lambda2=lambda2)
 #    macwe.levelset = seed_image
@@ -286,16 +282,16 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     return filtered_jac_inverted
  
  
-#def main():
+def main():
     """ main script, call all  the functions
     """
     #load images
-jac, jac_inverted, axis = load_images()
+    jac, jac_inverted, axis = load_images()
 
-#watershed
-#watersh = watershed(jac, seed_image=axis)
+    #watershed
+    watersh = watershed(jac, seed_image=axis)
     #anotehr option
-#    watersh = watershed(jac, threshold_distance = 80)
+    watersh = watershed(jac, threshold_distance = 80)
 #    
 #    #superpixels
 #    segments_slic = superpixels(image)
@@ -308,41 +304,4 @@ jac, jac_inverted, axis = load_images()
 #    #removing small ccomponents
 #    filtered_jac_inverted = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
     
-#main()
-    
-base_image = jac
-seed_image=axis 
-threshold_distance=80
-from scipy import ndimage as ndi
-
-from skimage.morphology import watershed
-from skimage.feature import peak_local_max
-from skimage.morphology import label
-import matplotlib.pyplot as plt
-from skimage.morphology import label
-import numpy as np
-
-
-distance = ndi.distance_transform_edt(base_image)
-imgplot = plt.imshow(distance)
-imgplot = plt.imshow(distance>40)
-
-thresh = distance > threshold_distance
-imgplot = plt.imshow(thresh) 
-
-
-
-#local_maxi = peak_local_max(distance, labels=jac, footprint=np.ones((100, 100)), indices=False)
-if seed_image is None: 
-    markers = label(thresh) 
-else:
-    markers = label(seed_image/255.0) 
- 
-imgplot = plt.imshow(markers)
- 
-  
-watersh = watershed(-distance, markers, mask=base_image) 
-plt.imshow(watersh, cmap=plt.cm.viridis, interpolation='nearest')
-
-return watersh
-    
+main()

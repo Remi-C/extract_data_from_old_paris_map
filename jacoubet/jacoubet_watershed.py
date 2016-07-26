@@ -34,7 +34,7 @@ def load_images():
     
     jac_inverted = np.logical_not(jac) 
      
-    imgplot = plt.imshow(axis, cmap='Greys')
+#    imgplot = plt.imshow(axis, cmap='Greys')
     
     return jac, jac_inverted, axis
 
@@ -178,42 +178,44 @@ def snake_skimage():
     # conclusion : snake from skimage seems to be unable to balloon
 
 
+def resize_image(im, percent):
+    from skimage.transform import resize  
+    return resize(im, [int(im.shape[0]*percent), int(im.shape[1]*percent)])  
+    
+
 ####################################
 # SNAKE : other lib
 ####################################
-def snake_research(base_image, seed_image, per_size=0.25):
+
+def snake_research(base_image, seed_image, per_size=0.25,smoothing=1, lambda1=1, lambda2=1):
     # the skimage snake implementation does not seems to be able to balloon
     # we try another implementation, maybe better, but pure research
      
     
     import sys
-    sys.path.append('/home/remi/soft/morphsnakes',smoothing=1, lambda1=1, lambda2=1)
+    sys.path.append('/home/remi/soft/morphsnakes')
       
     import morphsnakes
     from matplotlib import pyplot as ppl
     import time   
     from skimage.transform import resize  
     from PIL import Image 
-#    # Morphological ACWE. Initialization of the level-set.
-#    macwe = morphsnakes.MorphACWE(base_image, smoothing=smoothing, lambda1=lambda1, lambda2=lambda2)
-#    macwe.levelset = seed_image
-#    plt.imshow(macwe.levelset)
-#    
-#    # Visual evolution.
-#    ppl.figure()
-#    last_levelset = morphsnakes.evolve_visual(macwe, num_iters=10, background=jac)
-#    return last_levelset
-
-    
-    
-    def resize_image(im, percent):
-        return resize(im, [int(im.shape[0]*per_size), int(im.shape[1]*per_size)])  
-        
-    down_sampled_jac = resize_image(jac, per_size) 
-    gI = morphsnakes.gborders(resize_image(jac, per_size) , alpha=1000, sigma=2)
+    from skimage.morphology import label
+    #    # Morphological ACWE. Initialization of the level-set.
+    #    macwe = morphsnakes.MorphACWE(base_image, smoothing=smoothing, lambda1=lambda1, lambda2=lambda2)
+    #    macwe.levelset = seed_image
+    #    plt.imshow(macwe.levelset)
+    #    
+    #    # Visual evolution.
+    #    ppl.figure()
+    #    last_levelset = morphsnakes.evolve_visual(macwe, num_iters=10, background=jac)
+    #    return last_levelset 
+    down_sampled_jac = resize_image(base_image, per_size) 
+    gI = morphsnakes.gborders(down_sampled_jac, alpha=1000, sigma=2)
     
     # Morphological GAC. Initialization of the level-set.
     mgac = morphsnakes.MorphGAC(gI, smoothing=3, threshold=0.8, balloon=1.5)
+    markers = label(seed_image)
     mgac.levelset = resize_image(markers>0, per_size) 
     
     # Visual evolution.
@@ -221,7 +223,7 @@ def snake_research(base_image, seed_image, per_size=0.25):
     
       
     start_time = time.time()
-    last_levelset = morphsnakes.evolve_visual(mgac, num_iters=50, background=resize_image(jac, per_size) )
+    last_levelset = morphsnakes.evolve_visual(mgac, num_iters=50, background=down_sampled_jac )
     interval = time.time() - start_time  
     print('Total time in seconds:', interval)
     return last_levelset
@@ -244,6 +246,8 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     from skimage.restoration import denoise_bilateral
     from skimage import measure
     from skimage.morphology import label
+    import matplotlib.pyplot as plt
+    import numpy as np
     
     #dilate then retract using morph math to consolidate noisy results
     #binclos = binary_dilation(jac_inverted)
@@ -280,18 +284,73 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
      
     plt.imshow(filtered_jac_inverted, cmap='Greys')
     return filtered_jac_inverted
+
+
+
+def round_angle(iangle, step):
+    return round(iangle/(step*1.0))*step
+
+def dist_point_line(point,line):
+    """ line is [x1,y1,x2,y2], point is [x0,y0]"""
+    import  numpy as np
+    return np.abs((line[3]-[1])*point[0]-(line[2]-[0])*point[1] +line[2]*line[1] - line[3]*line[0]  )/np.sqrt(np.pow(line[3]-[1],2)+np.pow(line[2]-[0],2))        
+
+
+def find_lines(base_image, percent_resize=0.25, min_support = 100 , _minLineLength = 1000, _maxLineGap = 0, hough_s_dist_thre = 1, hough_s_angle_thre = 3.14/180):
+    """ using rransac ot find lines in the image. 
+    First resize image so the process is faster
+    """
+    import cv2
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    from skimage.morphology import skeletonize
+    from skimage.morphology import binary_closing,disk
+    
+    bi = skeletonize(base_image)
+#    binclos = binary_closing(bi,disk(4) )
+    
+#    plt.imshow(binclos)
+    gray_cv= np.array(resize_image(bi, percent_resize) * 255, dtype = np.uint8) 
+#    edges = cv2.Canny(gray_cv,50,150,apertureSize = 3)
+    #plt.imshow(edges) 
+    lines = cv2.HoughLinesP(gray_cv,hough_s_dist_thre,hough_s_angle_thre,min_support,minLineLength =_minLineLength,maxLineGap=_maxLineGap)
+    print('number of found lines: ',len(lines))
+    
+    y_scale = gray_cv.shape[1]
+    fig = plt.figure()  # a new figure window
+    ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)
+    ax.imshow(gray_cv, cmap='Greys')
+    
+    i = 0
+    if(len(lines)) < 10000:
+        for x in range(0, len(lines)):
+            for x1,y1,x2,y2 in lines[x]:
+                #filtering
+                if (np.absolute(x1-x2) < 2 or np.absolute(y1-y2) < 2) and np.sqrt(np.square(x1-x2) + np.square(y1-y2) ) > 20 :
+                    #do nothing ()
+                    i+=1
+                    
+                else:
+                    
+        #        print(x1,y1,x2,y2)
+        #        print('length : ',x1-x2,y1-y2)
+                    ax.plot((x1,x2),(y1,y2),linewidth=5.0)
+    print(i,'line filtered, looking like major vertical/horizontal line')
+    return lines
  
  
 def main():
     """ main script, call all  the functions
     """
+    import numpy as np
     #load images
     jac, jac_inverted, axis = load_images()
 
     #watershed
-    watersh = watershed(jac, seed_image=axis)
+#    watersh = watershed(jac, seed_image=axis)
     #anotehr option
-    watersh = watershed(jac, threshold_distance = 80)
+#    watersh = watershed(jac, threshold_distance = 80)
 #    
 #    #superpixels
 #    segments_slic = superpixels(image)
@@ -302,6 +361,20 @@ def main():
 #    last_levelset = snake_research(jac, axis)
 #    
 #    #removing small ccomponents
-#    filtered_jac_inverted = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
+    filtered_jac_inverted = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
+    
+    #snake_research(filtered_jac_inverted, axis)
+    
+    #finding segement in image
+    res = find_lines(filtered_jac_inverted, percent_resize=1 
+               , min_support = 40 
+               , _minLineLength = 35 #70 # for main
+               , _maxLineGap = 10
+               , hough_s_dist_thre = 1
+               , hough_s_angle_thre = np.pi/180)
+    print(len(res))
+    
     
 main()
+
+round_angle(90, 90)%90

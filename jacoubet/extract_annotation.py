@@ -6,6 +6,18 @@ Created on Tue Aug  9 16:12:47 2016
 """
 
 
+def walklevel(some_dir, level=1):
+    import os
+    some_dir = some_dir.rstrip(os.path.sep)
+    assert os.path.isdir(some_dir)
+    num_sep = some_dir.count(os.path.sep)
+    for root, dirs, files in os.walk(some_dir):
+        yield root, dirs, files
+        num_sep_this = root.count(os.path.sep)
+        if num_sep + level <= num_sep_this:
+            del dirs[:]
+
+
 def load_image(image_path):
     from osgeo import gdal
     import numpy as np
@@ -50,7 +62,7 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     to_remove_mask_resh = np.reshape(to_remove_mask, markers.shape)
 
     filtered_jac_inverted = np.copy(base_label_image)
-    filtered_jac_inverted[to_remove_mask_resh is True] = 0
+    filtered_jac_inverted[to_remove_mask_resh == 1] = 0
 
     return filtered_jac_inverted, to_remove_mask_resh
 
@@ -142,12 +154,17 @@ def single_out_annotation(base_image, small_cc_image):
 
     return region_prop
 
+def extract_annotations_from_raster_m(i_arr):
+    im_path, output_dir_for_annotation = i_arr
+    return extract_annotations_from_raster(im_path, output_dir_for_annotation)
+
 
 def extract_annotations_from_raster(im_path, output_dir_for_annotation):
     jac, jac_inverted, ds = load_image(im_path)
-
+    print('extracting annotations from raster ',im_path)
     # ####### removing small ccomponents ########
-    filtered_jac_inverted, to_remove_mask_resh = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
+    filtered_jac_inverted, to_remove_mask_resh = remove_small_ccomponents(
+        jac_inverted, size_closing=2, hist_thres=1000)
     # plot_image(to_remove_mask_resh)
 
     # ####### isolating each annotation ##########
@@ -155,12 +172,43 @@ def extract_annotations_from_raster(im_path, output_dir_for_annotation):
     deal_with_found_region(regions, output_dir_for_annotation, ds)
 
 
+def find_all_tiff_in_directory(input_folder, output_folder, multiprocess_version=False):
+    from os import path
+    import fnmatch
+    function_arg = []
+    for root, dirnames, filenames in walklevel(input_folder, 0):
+        # print(root, dirnames, filenames)
+        for filename in fnmatch.filter(filenames, '*.tif'):
+            filename_ne, file_extension = path.splitext(filename)
+            # print(path.join(root, filename), path.join(output_folder, filename_ne), tilesize)
+            arg = (path.join(root, filename), output_folder)
+            if multiprocess_version is False:
+                extract_annotations_from_raster_m(arg)
+            function_arg.append(arg)
+    return function_arg
+
+def multi_process_version(num_processes, function_arg):
+    import multiprocessing as mp
+    pool = mp.Pool(num_processes)
+    results = pool.map(extract_annotations_from_raster_m, function_arg)
+    return results
+
+
 def main():
     """ main script, call all  the functions
     """
     im_path = '/media/sf_RemiCura/DATA/EHESS/GIS_maurizio/jacoubet_l1/tiles/Feuille21_4000_8000.tif'
-    output_dir_for_annotation = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/results/annotations/'
-    extract_annotations_from_raster(im_path, output_dir_for_annotation)
+    output_dir_for_annotation = \
+        '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/results/annotations/'
+    
+    im_folder = '/media/sf_RemiCura/DATA/EHESS/GIS_maurizio/jacoubet_l1/tiles/'
+    multiprocess_version = True
+    num_processes = 1
+    
+    # extract_annotations_from_raster(im_path, output_dir_for_annotation)
+    function_arg = find_all_tiff_in_directory(
+        im_folder, output_dir_for_annotation, multiprocess_version)
+    multi_process_version(num_processes, function_arg)
 
 
 main()

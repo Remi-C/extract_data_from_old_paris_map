@@ -1,0 +1,2 @@
+#ignoring extracted annotations, there are too many, it great noise in the repo
+/jacoubet/results/annotations

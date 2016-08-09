@@ -8,23 +8,30 @@ Created on Mon Jul 18 11:50:13 2016
 #test on jacoubet to segment street/buildings
 #the idea is to use watershed, based on part of vector lines 
 
+    
+def plot_image(im, cmap='Greys'):
+    import matplotlib.pyplot as plt
+    fig = plt.figure()  # a new figure window
+    ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)   
+    ax.imshow(im, cmap) 
+
+
 def load_images():
     """ load images, returns the images loaded as numpy matrix
     """
     from osgeo import gdal 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.image as mpimg
+    import numpy as np 
     
     #load jacoubet image
     image_path = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract.tif'
     image_path_axis = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract_route.tif'
     image_path_axis_broken = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/Feuille31_extract_route_broken.tif'
-    
+    image_path_original_scan = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/BHVP_FM11_0031_C_extract.png'
     # open dataset
     ds = gdal.Open(image_path)
     ds2 = gdal.Open(image_path_axis)
     ds3 = gdal.Open(image_path_axis_broken)
+    ds4 = gdal.Open(image_path_original_scan)
     
     
     jac = np.array(ds.GetRasterBand(1).ReadAsArray())
@@ -32,11 +39,17 @@ def load_images():
     axis = np.array(ds3.GetRasterBand(1).ReadAsArray())
     axis = np.logical_not(axis)
     
+    ori_scan_r = np.array(ds4.GetRasterBand(1).ReadAsArray())
+    ori_scan_g = np.array(ds4.GetRasterBand(2).ReadAsArray())
+    ori_scan_b = np.array(ds4.GetRasterBand(3).ReadAsArray())
+    
+    ori_scan = np.dstack((ori_scan_r,ori_scan_g,ori_scan_b)) 
+    
     jac_inverted = np.logical_not(jac) 
      
-#    imgplot = plt.imshow(axis, cmap='Greys')
+    #imgplot = plt.imshow(axis, cmap='Greys')
     
-    return jac, jac_inverted, axis
+    return jac, jac_inverted, axis, ori_scan
 
 
 #######################
@@ -54,11 +67,13 @@ def watershed(base_image, seed_image=None, threshold_distance=80):
     
     
     distance = ndi.distance_transform_edt(base_image)
-    imgplot = plt.imshow(distance)
-    imgplot = plt.imshow(distance>40)
+    #    imgplot = plt.imshow(distance)
+    fig = plt.figure()  # a new figure window
+    ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)
+    #    ax.imshow(distance>threshold_distance, cmap='Greys')
     
     thresh = distance > threshold_distance
-    imgplot = plt.imshow(thresh) 
+    ax.imshow(thresh, cmap='Greys') 
     
     
     
@@ -68,11 +83,11 @@ def watershed(base_image, seed_image=None, threshold_distance=80):
     else:
         markers = label(seed_image)
 
-    imgplot = plt.imshow(markers)
+    #    imgplot = plt.imshow(markers)
      
       
     watersh = watershed(-distance, markers, mask=base_image) 
-    plt.imshow(watersh, cmap=plt.cm.viridis, interpolation='nearest')
+    #    plt.imshow(watersh, cmap=plt.cm.viridis, interpolation='nearest')
     
     return watersh
      
@@ -88,12 +103,12 @@ def superpixels(image):
     """ given an input image, create super pixels on it
     """
     # we could try to limit the problem of holes in boundary by first over segmenting the image
-        
+    import matplotlib.pyplot as plt
     from skimage.segmentation import felzenszwalb, slic, quickshift
     from skimage.segmentation import mark_boundaries
     from skimage.util import img_as_float
     
-    jac_float = img_as_float(image/255.0)
+    jac_float = img_as_float(image)
     plt.imshow(jac_float)
     #segments_fz = felzenszwalb(jac_float, scale=100, sigma=0.5, min_size=50)
     segments_slic = slic(jac_float, n_segments=600, compactness=0.01, sigma=0.001
@@ -238,9 +253,7 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     # to this end, we extract all markings, compute connected components,
     # compute the number of pixels in each components, and remove the components 
     # with few pixels
-    from scipy import ndimage as ndi
-    
-    
+    from scipy import ndimage as ndi 
     from skimage.morphology import binary_closing, binary_opening, binary_dilation
     from skimage.morphology import disk 
     from skimage.restoration import denoise_bilateral
@@ -257,11 +270,10 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     #bil = denoise_bilateral(binclos, sigma_color=0.05, sigma_spatial=5, multichannel=False)
     
     
-    #find the connected components
-    plt.imshow(binclos, cmap='Greys')
+    #find the connected components 
      
     markers, n_label = label(binclos, connectivity=1, background=0, return_num=True)
-    plt.imshow(markers,vmin=-1, vmax=1)
+    #plt.imshow(markers,vmin=-1, vmax=1)
      
     
     hist, bins = np.histogram(markers, bins=n_label)
@@ -275,15 +287,13 @@ def remove_small_ccomponents(base_label_image, size_closing=2, hist_thres=1000):
     
     to_remove_mask = np.in1d(markers, bins_to_remove.astype(int))
     np.sum(to_remove_mask==True) 
-    to_remove_mask_resh = np.reshape(to_remove_mask, markers.shape)
-    plt.imshow(to_remove_mask_resh, cmap='Greys')
+    to_remove_mask_resh = np.reshape(to_remove_mask, markers.shape) 
     
     
     filtered_jac_inverted = np.copy(base_label_image)
     filtered_jac_inverted[to_remove_mask_resh == True] = 0
-     
-    plt.imshow(filtered_jac_inverted, cmap='Greys')
-    return filtered_jac_inverted
+      
+    return filtered_jac_inverted, to_remove_mask_resh
 
 
 
@@ -308,20 +318,26 @@ def find_lines(base_image, percent_resize=0.25, min_support = 100 , _minLineLeng
     from skimage.morphology import binary_closing,disk
     
     bi = skeletonize(base_image)
-#    binclos = binary_closing(bi,disk(4) )
+    #    binclos = binary_closing(bi,disk(4) )
     
-#    plt.imshow(binclos)
+    #    plt.imshow(binclos)
     gray_cv= np.array(resize_image(bi, percent_resize) * 255, dtype = np.uint8) 
-#    edges = cv2.Canny(gray_cv,50,150,apertureSize = 3)
+    #    edges = cv2.Canny(gray_cv,50,150,apertureSize = 3)
     #plt.imshow(edges) 
     lines = cv2.HoughLinesP(gray_cv,hough_s_dist_thre,hough_s_angle_thre,min_support,minLineLength =_minLineLength,maxLineGap=_maxLineGap)
     print('number of found lines: ',len(lines))
-    
-    y_scale = gray_cv.shape[1]
+     
     fig = plt.figure()  # a new figure window
     ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)
-    ax.imshow(gray_cv, cmap='Greys')
     
+    blank = np.zeros(gray_cv.shape)
+    ax.imshow(blank, cmap='Greys')
+    ax.axis([0.0,gray_cv.shape[1], 0,gray_cv.shape[0]])
+    
+    """note : for a proper removal of grid line, we could expres sline i n hough
+     space, then filter based on angle (close to 0 or 90),
+     then perform kmeans with k = 4 to remove only the relevant lines
+    """
     i = 0
     if(len(lines)) < 10000:
         for x in range(0, len(lines)):
@@ -335,46 +351,161 @@ def find_lines(base_image, percent_resize=0.25, min_support = 100 , _minLineLeng
                     
         #        print(x1,y1,x2,y2)
         #        print('length : ',x1-x2,y1-y2)
-                    ax.plot((x1,x2),(y1,y2),linewidth=5.0)
+                    ax.plot((x1,x2),(y1,y2),linewidth=2.50, color='black')
     print(i,'line filtered, looking like major vertical/horizontal line')
     return lines
  
- 
+def distance_map(base_image, threshold_distance):
+    from scipy import ndimage as ndi
+    import matplotlib.pyplot as plt
+    
+    distance = ndi.distance_transform_edt(base_image)
+    #    imgplot = plt.imshow(distance)
+    fig = plt.figure()  # a new figure window
+    ax = fig.add_subplot(1, 1, 1)  # specify (nrows, ncols, axnum)
+    #    ax.imshow(distance>threshold_distance, cmap='Greys')
+    
+    thresh = distance > threshold_distance
+    ax.imshow(thresh, cmap='Greys') 
+
+def adaptative_thresholding(img, block_size):
+    """ based on the orginal color scan, filter it for smoothing, then 
+    tries an adaptative threslholding for a better binarization
+    as a bonus, the result can be used for other applications"""
+    from skimage.color import rgb2grey
+    from skimage.filters import threshold_otsu, threshold_adaptive 
+    from skimage.restoration import denoise_tv_chambolle, denoise_bilateral
+    import cv2
+    
+    #ori_scan_smooth = denoise_bilateral(img, sigma_color=0.05, sigma_spatial=4, multichannel=True)
+    ori_scan_smooth = cv2.bilateralFilter(img, d=50, sigmaColor=40, sigmaSpace=50 )
+    plot_image(ori_scan_smooth)
+    ori_scan_smooth_g = rgb2grey(ori_scan_smooth)
+    ori_scan_smooth_g = 1- ori_scan_smooth_g  
+    #thresholding original scan 
+    ori_scan_smooth_g_int =  (ori_scan_smooth_g*255 ).astype(np.uint8)
+    plot_image(ori_scan_smooth_g_int)
+      
+    #binary_adaptive = threshold_adaptive(ori_scan_smooth_g, block_size, method='median') 
+    ori_scan_bin  = adaptiveThreshold(ori_scan_smooth_g_int,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+    cv2.THRESH_BINARY,block_size,-3)
+   
+    plot_image(ori_scan_bin) 
+    return ori_scan_bin
+
+def single_out_annotation(base_image, small_cc_image):
+    """ extracting individual annotations :
+    starting from potential annotation + noise, we remove the noise and 
+     consolidate annotation area, then return the coordinates of center of 
+     potential annotations""" 
+     
+    #  remove small stuff
+    filtered_small_cc, removed_small_cc_small = remove_small_ccomponents(small_cc_image, size_closing=5, hist_thres=120)
+    #plot_image(removed_small_cc_small)
+    
+    # dilate 
+    from skimage.morphology import binary_dilation, disk
+    dilation_radius = 10
+    small_cc_cleaned_mask = binary_dilation(filtered_small_cc, disk(dilation_radius))
+    #plot_image(small_cc_cleaned_mask) 
+    
+    #label connected compoenents
+    from skimage.morphology import label
+    from skimage.measure import regionprops
+    from skimage.io import imsave
+    markers, n_label = label(small_cc_cleaned_mask, connectivity=1, background=0, return_num=True)
+    
+    #for each cc, defines a region    
+    region_prop = regionprops(markers, (base_image*255).astype(np.uint8))
+    
+    #for each region, do something
+    
+    base_path = '/media/sf_RemiCura/PROJETS/belleepoque/extract_data_from_old_paris_map/jacoubet/results/annotations/'
+    for region in region_prop: 
+        #print(region.bbox, region.area)
+        imsave(base_path+str(region.bbox)+'.png', region.intensity_image) 
+        
+    return region_prop
+
 def main():
     """ main script, call all  the functions
     """
     import numpy as np
-    #load images
-    jac, jac_inverted, axis = load_images()
-
-    #watershed
-#    watersh = watershed(jac, seed_image=axis)
+    import matplotlib.pyplot as plt
+    
+    
+    ######## load images ########
+    jac, jac_inverted, axis, ori_scan = load_images() 
+    
+    ######## adaptative thresholding #########
+    #adaptative thresholding on original scan:
+    #adaptative_thresholding(ori_scan, 101)
+     
+     
+    ######## watershed ########
+    #watersh = watershed(jac, seed_image=axis)
     #anotehr option
-#    watersh = watershed(jac, threshold_distance = 80)
+    #watersh = watershed(jac, threshold_distance = 80)
+    
+     
+    
+    ######## snake ######## 
+    
+    #snake with another lib, able to ballon
+    #last_levelset = snake_research(jac, axis)
+    
+    ######## removing small ccomponents ########  
+    filtered_jac_inverted, to_remove_mask_resh = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
+    plot_image(to_remove_mask_resh) 
+    
+    ######## isolating each annotation ##########
+    regions = single_out_annotation(jac_inverted, to_remove_mask_resh)
+    reg = regions[0]
+    ######## OCR on isolated annotations ########
+    """    
+    import pyocr
+    from PIL import Image
+    tools = pyocr.get_available_tools()
+    print(tools)
+    tool = tools[1]
+    langs = tool.get_available_languages()
+    print("Available languages: %s" % ", ".join(langs))
+    lang = 'fra'
+    im= Image.fromarray(  reg.intensity_image)
+    plot_image(im)
+    word_boxes = tool.image_to_string(im,
+                                      lang=lang,
+        builder=pyocr.builders.WordBoxBuilder()
+    )   
+    
+    digits = tool.image_to_string(
+        im,
+        lang=lang,
+        builder=pyocr.tesseract.detect_orientation(im)
+    )
+    """
+    #filtered_jac = np.logical_not(filtered_jac_inverted)    
+    
+    #distance_map(filtered_jac, threshold_distance=80)
+    
+    #superpixels
+#    segments_slic = superpixels(filtered_jac)
+#    from skimage.segmentation import mark_boundaries
+#    bound = mark_boundaries(filtered_jac, segments_slic, color=(0,0,0), mode='subpixel')
 #    
-#    #superpixels
-#    segments_slic = superpixels(image)
-#    
-#    #snake
-#    
-#    #snake with another lib, able to ballon
-#    last_levelset = snake_research(jac, axis)
-#    
-#    #removing small ccomponents
-    filtered_jac_inverted = remove_small_ccomponents(jac_inverted, size_closing=2, hist_thres=1000)
+
     
     #snake_research(filtered_jac_inverted, axis)
     
     #finding segement in image
-    res = find_lines(filtered_jac_inverted, percent_resize=1 
-               , min_support = 40 
-               , _minLineLength = 35 #70 # for main
-               , _maxLineGap = 10
-               , hough_s_dist_thre = 1
-               , hough_s_angle_thre = np.pi/180)
-    print(len(res))
+#    res = find_lines(filtered_jac_inverted, percent_resize=1 
+#               , min_support = 40 
+#               , _minLineLength = 35 #70 # for main
+#               , _maxLineGap = 10
+#               , hough_s_dist_thre = 1
+#               , hough_s_angle_thre = np.pi/180)
+#    print(len(res))
     
     
 main()
-
-round_angle(90, 90)%90
+ 

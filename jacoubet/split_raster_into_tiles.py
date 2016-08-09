@@ -5,7 +5,7 @@ Created on Tue Aug  9 14:48:25 2016
 @author: remi
 """
 
-import os, sys
+import os
 from osgeo import gdal
 
 
@@ -18,50 +18,53 @@ def walklevel(some_dir, level=1):
         num_sep_this = root.count(os.path.sep)
         if num_sep + level <= num_sep_this:
             del dirs[:]
-            
-            
-def cut_one_raster_into_tiles(i_list): 
-    input_file_path, output_file_ne, tilesize  = i_list
-    from os import path 
+
+
+def cut_one_raster_into_tiles(i_list):
+    input_file_path, output_file_ne, tilesize = i_list
     dset = gdal.Open(input_file_path)
-    
+
     width = dset.RasterXSize
     height = dset.RasterYSize
-    
+
     print(width, 'x', height)
- 
-    
+
     for i in range(0, width, tilesize):
         for j in range(0, height, tilesize):
             w = min(i+tilesize, width) - i
             h = min(j+tilesize, height) - j
-            gdaltranString = "gdal_translate -of GTIFF -co TFW=YES -srcwin "+str(i)+", "+str(j)+", "+str(w)+", " \
-                +str(h)+" " + input_file_path + " " + output_file_ne + "_"+str(i)+"_"+str(j)+".tif"
+            gdaltranString = "gdal_translate -of GTIFF -co TFW=YES -srcwin " \
+                + str(i) + ", " + str(j)+", " + str(w) + ", " \
+                + str(h) + " " + input_file_path + " " + output_file_ne + "_" \
+                + str(i) + "_" + str(j) + ".tif"
 #            print(gdaltranString)
             os.system(gdaltranString)
-            
-def cut_a_folder_into_tiles(input_folder, output_folder,tilesize, mutliprocess_version=False):
-    import glob
+
+
+def cut_a_folder_into_tiles(input_folder, output_folder, tilesize,
+                            mutliprocess_version=False):
     from os import path
-    import fnmatch 
+    import fnmatch
     function_arg = []
-    for root, dirnames, filenames in walklevel(input_folder,0):
-    #    print(root, dirnames, filenames)
+    for root, dirnames, filenames in walklevel(input_folder, 0):
+        # print(root, dirnames, filenames)
         for filename in fnmatch.filter(filenames, '*.tif'):
-            filename_ne, file_extension = os.path.splitext(filename)
-            print('dealing with raster ',filename)
-#            print(path.join(root, filename), path.join(output_folder, filename_ne), tilesize)
+            filename_ne, file_extension = path.splitext(filename)
+            print('dealing with raster ', filename)
+            # print(path.join(root, filename), path.join(output_folder, filename_ne), tilesize)
             arg = (path.join(root, filename), path.join(output_folder, filename_ne), tilesize)
-            if mutliprocess_version == False:
-               cut_one_raster_into_tiles(arg) 
+            if mutliprocess_version is False:
+                cut_one_raster_into_tiles(arg)
             function_arg.append(arg)
-    return function_arg 
-            
-            
+    return function_arg
+
+
 def multi_process_version(num_processes, function_arg):
-    import multiprocessing as mp 
-    pool = mp.Pool(num_processes) 
+    import multiprocessing as mp
+    pool = mp.Pool(num_processes)
     results = pool.map(cut_one_raster_into_tiles, function_arg)
+    return results
+
 
 def main():
     input_folder = '/media/sf_RemiCura/DATA/EHESS/GIS_maurizio/jacoubet_l1/'
@@ -69,14 +72,10 @@ def main():
     tilesize = 2000
     mutliprocess_version = True
     num_processes = 6
-    
-    
-    function_arg = cut_a_folder_into_tiles(input_folder, output_folder,tilesize, mutliprocess_version)
-    if mutliprocess_version == True:
-        multi_process_version(num_processes, function_arg)
-        
 
-    
-    
-    
+    function_arg = cut_a_folder_into_tiles(input_folder, output_folder,
+                                           tilesize, mutliprocess_version)
+    if mutliprocess_version is True:
+        multi_process_version(num_processes, function_arg)
+
 main()

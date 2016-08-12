@@ -42,7 +42,7 @@ imgpath = '/media/sf_RemiCura/PROJETS/belleepoque/creation_donnees/ocr_numero/j2
 
 #importing image 
 src_im = None
-src_im = Image.open(imgpath)  
+src_im = Image.open(imgpath)
 new_size_percent = 0.25
 src_im = src_im.resize((int(src_im.size[0]*new_size_percent),int(src_im.size[1]*new_size_percent)), Image.ANTIALIAS)
 #rotating image

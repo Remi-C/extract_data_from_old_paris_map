@@ -140,7 +140,7 @@ def parallel_version(function_arg, num_process):
 
      
 def main():
-    from os import path
+    
     from datetime import datetime 
     
     beginning = datetime.now()
